@@ -78,7 +78,7 @@ export function useMeter(): UseMeterReturn {
         rawLuminance: luminance,
         timestamp: Date.now(),
         meteringMode,
-        source: overrideEv !== undefined ? 'camera-pixel' : source,
+        source: overrideEv !== undefined ? 'manual' : source,
       };
       setReadings((prev) => [reading, ...prev].slice(0, MAX_READINGS));
     },
