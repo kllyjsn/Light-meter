@@ -23,7 +23,11 @@ export interface ExposureTriangle {
   iso: number;
   needsND?: boolean;
   needsElectronicShutter?: boolean;
+  slowShutter?: boolean;
 }
+
+// Minimum handheld-safe shutter for 35mm equiv focal length (1/60s for 35mm)
+const HANDHELD_MIN_SHUTTER = 1 / 60;
 
 /** Given EV₁₀₀ and a preferred aperture, find the best shutter + ISO combo. */
 export function solveAperturePriority(
@@ -34,11 +38,28 @@ export function solveAperturePriority(
   const effectiveEv = useND ? ev100 - ND_FILTER_STOPS : ev100;
   const av = 2 * Math.log2(preferredAperture);
 
+  // First pass: prefer handheld-safe shutter speeds (>= 1/60s)
   for (const iso of ISO_VALUES) {
     const sv = Math.log2(iso / 100);
     const tv = effectiveEv + sv - av;
     const t = Math.pow(2, -tv);
+    const closest = findClosestShutter(t);
+    if (closest !== null && closest <= HANDHELD_MIN_SHUTTER) {
+      return {
+        aperture: preferredAperture,
+        shutterSpeed: closest,
+        iso,
+        needsND: useND,
+        needsElectronicShutter: closest < 1 / 4000,
+      };
+    }
+  }
 
+  // Second pass: allow slow shutters if no handheld-safe combo exists
+  for (const iso of ISO_VALUES) {
+    const sv = Math.log2(iso / 100);
+    const tv = effectiveEv + sv - av;
+    const t = Math.pow(2, -tv);
     const closest = findClosestShutter(t);
     if (closest !== null) {
       return {
@@ -47,6 +68,7 @@ export function solveAperturePriority(
         iso,
         needsND: useND,
         needsElectronicShutter: closest < 1 / 4000,
+        slowShutter: closest > HANDHELD_MIN_SHUTTER,
       };
     }
   }
@@ -122,7 +144,7 @@ export function solveProgram(ev100: number): ExposureTriangle {
         // Score: prefer low ISO, sharpest apertures (f/5.6-f/8), safe handheld shutter
         const isoScore = Math.log2(iso / 100) * 3;
         const sharpness = Math.abs(Math.log2(aperture / 5.6)); // f/5.6 is sharpest
-        const handhold = closest > 1 / 30 ? 5 : closest > 1 / 60 ? 1 : 0;
+        const handhold = closest > HANDHELD_MIN_SHUTTER ? 10 : 0; // heavy penalty for slow shutter
         const ndPenalty = useND ? 0.5 : 0;
         const score = isoScore + sharpness + handhold + ndPenalty;
 

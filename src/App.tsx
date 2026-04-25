@@ -125,6 +125,7 @@ function App() {
         isLocked={meter.isLocked}
         onToggleLock={meter.toggleLock}
         onSaveReading={meter.saveReading}
+        source={meter.source}
       />
 
       {/* Mode selectors */}

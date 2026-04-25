@@ -24,6 +24,14 @@ import type { MeterReading } from '../lib/metering';
 
 type Tab = 'settings' | 'info' | 'history';
 
+function formatDistance(m: number): string {
+  if (m === Infinity) return '\u221e';
+  if (m < 0.01) return `${(m * 1000).toFixed(1)}mm`;
+  if (m < 1) return `${(m * 100).toFixed(0)}cm`;
+  if (m < 10) return `${m.toFixed(2)}m`;
+  return `${m.toFixed(1)}m`;
+}
+
 interface Props {
   ev: number;
   exposureMode: ExposureMode;
@@ -176,8 +184,8 @@ export function SettingsPanel({
           </div>
 
           {/* Flags */}
-          {(result.needsND || result.needsElectronicShutter) && (
-            <div className="px-4 flex gap-2">
+          {(result.needsND || result.needsElectronicShutter || result.slowShutter) && (
+            <div className="px-4 flex gap-2 flex-wrap">
               {result.needsND && (
                 <span className="text-[10px] px-2 py-1 rounded-md bg-amber-400/10 text-amber-400 border border-amber-400/20 font-medium tracking-wider">
                   ND REQUIRED
@@ -186,6 +194,11 @@ export function SettingsPanel({
               {result.needsElectronicShutter && (
                 <span className="text-[10px] px-2 py-1 rounded-md bg-blue-400/10 text-blue-400 border border-blue-400/20 font-medium tracking-wider">
                   E-SHUTTER
+                </span>
+              )}
+              {result.slowShutter && (
+                <span className="text-[10px] px-2 py-1 rounded-md bg-red-400/10 text-red-400 border border-red-400/20 font-medium tracking-wider">
+                  USE TRIPOD
                 </span>
               )}
             </div>
@@ -284,7 +297,7 @@ export function SettingsPanel({
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div className="text-center">
                 <div className="text-white/60 text-lg font-light tabular-nums">
-                  {dof.near.toFixed(2)}m
+                  {formatDistance(dof.near)}
                 </div>
                 <div className="text-white/25 text-[9px] uppercase tracking-wider">
                   Near
@@ -292,9 +305,7 @@ export function SettingsPanel({
               </div>
               <div className="text-center">
                 <div className="text-amber-400 text-lg font-light tabular-nums">
-                  {dof.total === Infinity
-                    ? '∞'
-                    : `${dof.total.toFixed(2)}m`}
+                  {formatDistance(dof.total)}
                 </div>
                 <div className="text-white/25 text-[9px] uppercase tracking-wider">
                   Total DoF
@@ -302,7 +313,7 @@ export function SettingsPanel({
               </div>
               <div className="text-center">
                 <div className="text-white/60 text-lg font-light tabular-nums">
-                  {dof.far === Infinity ? '∞' : `${dof.far.toFixed(2)}m`}
+                  {formatDistance(dof.far)}
                 </div>
                 <div className="text-white/25 text-[9px] uppercase tracking-wider">
                   Far
@@ -310,7 +321,7 @@ export function SettingsPanel({
               </div>
             </div>
             <div className="text-white/20 text-[10px] mb-2">
-              Hyperfocal: {dof.hyperfocal.toFixed(1)}m
+              Hyperfocal: {formatDistance(dof.hyperfocal)}
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">

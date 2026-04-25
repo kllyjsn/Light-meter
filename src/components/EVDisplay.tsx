@@ -1,4 +1,5 @@
 import { evToSceneDescription, evToLux } from '../lib/exposure';
+import type { MeterReading } from '../lib/metering';
 
 interface Props {
   ev: number;
@@ -11,7 +12,15 @@ interface Props {
   isLocked: boolean;
   onToggleLock: () => void;
   onSaveReading: (overrideEv?: number) => void;
+  source: MeterReading['source'];
 }
+
+const SOURCE_LABELS: Record<MeterReading['source'], { label: string; color: string }> = {
+  'camera-imagecapture': { label: 'EXIF', color: 'text-green-400' },
+  'camera-pixel': { label: 'PIXEL EST.', color: 'text-amber-400' },
+  'ambient-sensor': { label: 'SENSOR', color: 'text-green-400' },
+  manual: { label: 'MANUAL', color: 'text-blue-400' },
+};
 
 export function EVDisplay({
   ev,
@@ -24,10 +33,12 @@ export function EVDisplay({
   isLocked,
   onToggleLock,
   onSaveReading,
+  source,
 }: Props) {
   const displayEv = isManual ? manualEv : ev;
   const displayLux = isManual ? evToLux(manualEv) : lux;
   const scene = evToSceneDescription(displayEv);
+  const sourceInfo = isManual ? SOURCE_LABELS.manual : SOURCE_LABELS[source];
 
   // EV gauge: -6 to 20 range
   const evMin = -6;
@@ -111,6 +122,10 @@ export function EVDisplay({
           <div className="text-amber-400/60 text-[11px] mt-0.5 font-medium">
             {scene}
           </div>
+          {/* Metering source badge */}
+          <div className={`text-[9px] mt-1 font-bold tracking-wider ${sourceInfo.color}`}>
+            {sourceInfo.label}
+          </div>
         </div>
 
         <button
@@ -137,7 +152,7 @@ export function EVDisplay({
               type="range"
               min={-6}
               max={20}
-              step={0.3}
+              step={1 / 3}
               value={manualEv}
               onChange={(e) => onManualEvChange(parseFloat(e.target.value))}
               className="w-full"
@@ -147,7 +162,7 @@ export function EVDisplay({
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] tracking-[0.15em] uppercase text-white/30 font-medium">
-                EV Comp
+                EV Comp / Calibration
               </span>
               <span className="text-xs text-white/40 tabular-nums font-mono">
                 {evOffset > 0 ? '+' : ''}
@@ -156,13 +171,18 @@ export function EVDisplay({
             </div>
             <input
               type="range"
-              min={-3}
-              max={3}
-              step={0.3}
+              min={-5}
+              max={5}
+              step={1 / 3}
               value={evOffset}
               onChange={(e) => onEvOffsetChange(parseFloat(e.target.value))}
               className="w-full"
             />
+            {source === 'camera-pixel' && !isManual && (
+              <div className="text-[9px] text-white/20 mt-1 text-center">
+                Pixel metering is approximate — use this slider to calibrate against the Sunny 16 chart
+              </div>
+            )}
           </div>
         )}
       </div>

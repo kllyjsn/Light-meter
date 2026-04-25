@@ -56,33 +56,23 @@ export async function readImageCaptureSettings(
 }
 
 /**
- * Back-calculate scene EV100 from camera settings and image brightness.
+ * Back-calculate scene EV100 from camera exposure metadata.
  *
- * The camera's auto-exposure tries to render the scene at ~18% gray.
- * Given the camera's chosen settings (t, ISO, f), we know:
- *   EV_camera = log2(N² / t)
- *   EV100_camera = EV_camera - log2(ISO / 100)
+ * This is the standard metering equation used by all camera light meters:
+ *   EV = log2(N² / t)
+ *   EV100 = EV − log2(ISO / 100)
  *
- * Then we adjust based on how far the average pixel brightness is from
- * the target mid-gray (the camera might not perfectly reach its target):
- *   EV100_scene = EV100_camera + log2(brightness / 0.18)
- *
- * This is significantly more accurate than pixel-only estimation.
+ * The camera's auto-exposure already chose settings to properly expose
+ * the scene, so the metadata alone determines scene EV. No pixel-brightness
+ * correction is applied — that would just add auto-exposure noise.
  */
 export function backCalculateEV(
   exposureTime: number,
   iso: number,
   aperture: number,
-  normalizedBrightness: number,
 ): number {
-  const evCamera = Math.log2((aperture * aperture) / exposureTime);
-  const ev100Camera = evCamera - Math.log2(iso / 100);
-
-  // Adjust for how bright the image actually is vs. 18% gray target
-  const brightnessAdjust = Math.log2(
-    Math.max(normalizedBrightness, 0.001) / 0.18,
-  );
-  return ev100Camera + brightnessAdjust;
+  const ev = Math.log2((aperture * aperture) / exposureTime);
+  return ev - Math.log2(iso / 100);
 }
 
 /**
@@ -179,15 +169,16 @@ export function computeHistogram(
  * Pixel-only EV estimation (fallback when ImageCapture is unavailable).
  *
  * Phone cameras auto-expose to keep frames near mid-gray (~0.18 linear),
- * compressing the visible brightness range. A gain factor expands this
- * compressed signal back into a usable EV span (~0 to ~14).
+ * so pixel brightness is a compressed proxy for scene EV. This is inherently
+ * approximate — use the EV compensation slider to calibrate against a known
+ * reference (e.g. Sunny 16 chart).
  *
- * Calibrated so that a typical auto-exposed indoor frame (brightness ≈ 0.18)
- * maps to EV 5, matching real-world indoor illuminance (~160 lux).
+ * Base EV 7 sits between typical indoor (5–8) and outdoor (10–15).
+ * Gain of 2.5 expands the compressed range to roughly EV 3–12.
  */
 export function pixelOnlyEV(linearBrightness: number): number {
-  const baseEv = 5;
-  const gain = 3.5;
+  const baseEv = 7;
+  const gain = 2.5;
   const adjust = Math.log2(Math.max(linearBrightness, 0.0001) / 0.18);
   return baseEv + gain * adjust;
 }

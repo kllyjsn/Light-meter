@@ -136,7 +136,6 @@ export function useMeter(): UseMeterReturn {
             cachedCameraSettings.exposureTime,
             cachedCameraSettings.iso,
             cachedCameraSettings.aperture,
-            rawLum,
           );
         } else {
           rawEv = pixelOnlyEV(rawLum);
