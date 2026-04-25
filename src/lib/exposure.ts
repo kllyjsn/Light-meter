@@ -154,7 +154,7 @@ export function checkExposure(
   const effectiveEv = useND ? ev100 - ND_FILTER_STOPS : ev100;
   const cameraEv = 2 * Math.log2(aperture) + Math.log2(1 / shutterSpeed);
   const requiredEv = effectiveEv + Math.log2(iso / 100);
-  return cameraEv - requiredEv;
+  return requiredEv - cameraEv;
 }
 
 /** Generate multiple exposure combos for a given EV, sorted by quality. */
