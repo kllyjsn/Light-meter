@@ -171,8 +171,8 @@ export function EVDisplay({
             </div>
             <input
               type="range"
-              min={-5}
-              max={5}
+              min={Math.min(-5, evOffset - 2)}
+              max={Math.max(5, evOffset + 2)}
               step={1 / 3}
               value={evOffset}
               onChange={(e) => onEvOffsetChange(parseFloat(e.target.value))}
