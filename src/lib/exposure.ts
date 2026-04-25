@@ -209,16 +209,28 @@ export function generateCombinations(
     }
   }
 
-  // Sort: prefer no-ND, low ISO, then sharp apertures
-  results.sort((a, b) => {
-    if (a.needsND !== b.needsND) return a.needsND ? 1 : -1;
-    if (a.iso !== b.iso) return a.iso - b.iso;
-    const aSharp = Math.abs(Math.log2(a.aperture / 5.6));
-    const bSharp = Math.abs(Math.log2(b.aperture / 5.6));
-    return aSharp - bSharp;
+  // Score each combo: prefer handheld-safe, no-ND, low ISO, sharp apertures
+  const scored = results.map((r) => {
+    const slowPenalty = r.shutterSpeed > HANDHELD_MIN_SHUTTER ? 8 : 0;
+    const ndPenalty = r.needsND ? 4 : 0;
+    const isoScore = Math.log2(r.iso / 100);
+    const sharpness = Math.abs(Math.log2(r.aperture / 5.6));
+    return { ...r, score: slowPenalty + ndPenalty + isoScore + sharpness };
   });
+  scored.sort((a, b) => a.score - b.score);
 
-  return results.slice(0, count);
+  // Deduplicate: max 2 results per aperture to show ISO variety
+  const seen = new Map<number, number>();
+  const deduped: ExposureTriangle[] = [];
+  for (const r of scored) {
+    const c = seen.get(r.aperture) ?? 0;
+    if (c >= 2) continue;
+    seen.set(r.aperture, c + 1);
+    deduped.push(r);
+    if (deduped.length >= count) break;
+  }
+
+  return deduped;
 }
 
 function findClosestShutter(target: number): number | null {

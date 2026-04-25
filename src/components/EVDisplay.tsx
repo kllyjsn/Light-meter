@@ -179,8 +179,21 @@ export function EVDisplay({
               className="w-full"
             />
             {source === 'camera-pixel' && !isManual && (
-              <div className="text-[9px] text-white/20 mt-1 text-center">
-                Pixel metering is approximate — use this slider to calibrate against the Sunny 16 chart
+              <div className="mt-3">
+                <div className="text-[9px] text-white/20 mb-2 text-center">
+                  Pixel metering is approximate — tap a scene preset to set the base EV:
+                </div>
+                <div className="flex gap-1.5 flex-wrap justify-center">
+                  {SCENE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => onEvOffsetChange(preset.ev - ev + evOffset)}
+                      className="text-[9px] px-2.5 py-1.5 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60 transition-all font-medium tracking-wider"
+                    >
+                      {preset.icon} {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -189,3 +202,12 @@ export function EVDisplay({
     </div>
   );
 }
+
+const SCENE_PRESETS = [
+  { label: 'BRIGHT SUN', icon: '\u2600', ev: 15 },
+  { label: 'OVERCAST', icon: '\u2601', ev: 12 },
+  { label: 'SHADE', icon: '\u26C5', ev: 10 },
+  { label: 'WELL-LIT', icon: '\uD83D\uDCA1', ev: 7 },
+  { label: 'INDOOR', icon: '\uD83C\uDFE0', ev: 5 },
+  { label: 'DIM', icon: '\uD83D\uDD6F', ev: 3 },
+] as const;
