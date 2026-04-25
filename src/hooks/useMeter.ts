@@ -51,6 +51,7 @@ export function useMeter(): UseMeterReturn {
   const [readings, setReadings] = useState<MeterReading[]>([]);
 
   const rafRef = useRef<number>(0);
+  const runningRef = useRef(false);
   const smoothEv = useRef(10);
   const frameCount = useRef(0);
   const lockedRef = useRef(false);
@@ -92,6 +93,7 @@ export function useMeter(): UseMeterReturn {
       video: HTMLVideoElement,
       stream: MediaStream | null,
     ) => {
+      runningRef.current = true;
       setIsRunning(true);
       let lastImageCaptureCheck = 0;
       let cachedCameraSettings: {
@@ -101,6 +103,8 @@ export function useMeter(): UseMeterReturn {
       } | null = null;
 
       const tick = async () => {
+        if (!runningRef.current) return;
+
         if (lockedRef.current) {
           rafRef.current = requestAnimationFrame(tick);
           return;
@@ -115,6 +119,7 @@ export function useMeter(): UseMeterReturn {
           const track = stream.getVideoTracks()[0];
           if (track) {
             const settings = await readImageCaptureSettings(track);
+            if (!runningRef.current) return;
             if (settings) {
               cachedCameraSettings = settings;
               setSource('camera-imagecapture');
@@ -147,7 +152,9 @@ export function useMeter(): UseMeterReturn {
           setHistogram(hist);
         }
 
-        rafRef.current = requestAnimationFrame(tick);
+        if (runningRef.current) {
+          rafRef.current = requestAnimationFrame(tick);
+        }
       };
 
       rafRef.current = requestAnimationFrame(tick);
@@ -156,6 +163,7 @@ export function useMeter(): UseMeterReturn {
   );
 
   const stopMetering = useCallback(() => {
+    runningRef.current = false;
     cancelAnimationFrame(rafRef.current);
     setIsRunning(false);
   }, []);
