@@ -10,7 +10,7 @@ interface Props {
   onManualEvChange: (ev: number) => void;
   isLocked: boolean;
   onToggleLock: () => void;
-  onSaveReading: () => void;
+  onSaveReading: (overrideEv?: number) => void;
 }
 
 export function EVDisplay({
@@ -114,7 +114,7 @@ export function EVDisplay({
         </div>
 
         <button
-          onClick={onSaveReading}
+          onClick={() => onSaveReading(isManual ? manualEv : undefined)}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider bg-white/5 text-white/40 hover:bg-white/10 transition-all"
         >
           SAVE

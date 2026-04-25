@@ -58,6 +58,7 @@ export function SettingsPanel({
           shutterSpeed: selectedShutter,
           iso: selectedISO,
           needsND: useND,
+          needsElectronicShutter: selectedShutter < 1 / 4000,
         };
     }
   }, [ev, exposureMode, selectedAperture, selectedShutter, selectedISO, useND]);

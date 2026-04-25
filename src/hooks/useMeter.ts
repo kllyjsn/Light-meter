@@ -25,7 +25,7 @@ interface UseMeterReturn {
   source: MeterReading['source'];
   readings: MeterReading[];
   clearReadings: () => void;
-  saveReading: () => void;
+  saveReading: (overrideEv?: number) => void;
   startMetering: (
     canvas: HTMLCanvasElement,
     ctx: CanvasRenderingContext2D,
@@ -69,18 +69,21 @@ export function useMeter(): UseMeterReturn {
     setIsLocked((prev) => !prev);
   }, []);
 
-  const saveReading = useCallback(() => {
-    const adjustedEvValue = ev + evOffset;
-    const reading: MeterReading = {
-      ev100: adjustedEvValue,
-      lux: evToLux(adjustedEvValue),
-      rawLuminance: luminance,
-      timestamp: Date.now(),
-      meteringMode,
-      source,
-    };
-    setReadings((prev) => [reading, ...prev].slice(0, MAX_READINGS));
-  }, [ev, evOffset, luminance, meteringMode, source]);
+  const saveReading = useCallback(
+    (overrideEv?: number) => {
+      const evValue = overrideEv ?? ev + evOffset;
+      const reading: MeterReading = {
+        ev100: evValue,
+        lux: evToLux(evValue),
+        rawLuminance: luminance,
+        timestamp: Date.now(),
+        meteringMode,
+        source: overrideEv !== undefined ? 'camera-pixel' : source,
+      };
+      setReadings((prev) => [reading, ...prev].slice(0, MAX_READINGS));
+    },
+    [ev, evOffset, luminance, meteringMode, source],
+  );
 
   const clearReadings = useCallback(() => {
     setReadings([]);
