@@ -41,7 +41,7 @@ export const FILM_SIMULATIONS = [
 export function formatShutter(t: number): string {
   if (t >= 1) return `${t}"`;
   const denom = Math.round(1 / t);
-  return `1/${denom}`;
+  return `${denom}`;
 }
 
 export function formatAperture(f: number): string {
