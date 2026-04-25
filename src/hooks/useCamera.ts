@@ -4,6 +4,7 @@ interface UseCameraReturn {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   ctxRef: React.MutableRefObject<CanvasRenderingContext2D | null>;
+  streamRef: React.MutableRefObject<MediaStream | null>;
   isActive: boolean;
   error: string | null;
   start: () => Promise<void>;
@@ -23,14 +24,27 @@ export function useCamera(): UseCameraReturn {
     'environment',
   );
 
+  const stop = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsActive(false);
+  }, []);
+
   const start = useCallback(async () => {
     try {
       setError(null);
+      // Stop any existing stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
         audio: false,
       });
@@ -43,8 +57,8 @@ export function useCamera(): UseCameraReturn {
       }
 
       if (canvasRef.current) {
-        canvasRef.current.width = 160;
-        canvasRef.current.height = 120;
+        canvasRef.current.width = 320;
+        canvasRef.current.height = 240;
         ctxRef.current = canvasRef.current.getContext('2d', {
           willReadFrequently: true,
         });
@@ -59,27 +73,17 @@ export function useCamera(): UseCameraReturn {
     }
   }, [facingMode]);
 
-  const stop = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setIsActive(false);
-  }, []);
-
   const toggleCamera = useCallback(() => {
+    const wasActive = isActive;
     stop();
     setFacingMode((prev) =>
       prev === 'environment' ? 'user' : 'environment',
     );
-  }, [stop]);
-
-  // Restart camera when facingMode changes
-  useEffect(() => {
-    if (isActive || error === null) {
-      // Only auto-start if we were previously active or on initial mount
+    if (wasActive) {
+      // Restart with new facing mode after state update
+      setTimeout(() => start(), 100);
     }
-  }, [facingMode, isActive, error]);
+  }, [stop, start, isActive]);
 
   useEffect(() => {
     return () => {
@@ -93,6 +97,7 @@ export function useCamera(): UseCameraReturn {
     videoRef,
     canvasRef,
     ctxRef,
+    streamRef,
     isActive,
     error,
     start,

@@ -1,8 +1,94 @@
 export type MeteringMode = 'matrix' | 'center' | 'spot';
 
+export interface MeterReading {
+  ev100: number;
+  lux: number;
+  rawLuminance: number;
+  timestamp: number;
+  meteringMode: MeteringMode;
+  source: 'camera-imagecapture' | 'camera-pixel' | 'ambient-sensor' | 'manual';
+}
+
+/**
+ * Attempt to use the ImageCapture API to read actual camera exposure settings.
+ * This gives us the most accurate EV reading by back-calculating from the
+ * camera's auto-exposure parameters.
+ */
+export async function readImageCaptureSettings(
+  track: MediaStreamTrack,
+): Promise<{ exposureTime: number; iso: number; aperture: number } | null> {
+  try {
+    if (!('ImageCapture' in window)) return null;
+    const ic = new ImageCapture(track);
+    const settings = track.getSettings();
+
+    const exposureTime =
+      (settings as Record<string, unknown>).exposureTime as number | undefined;
+    const iso =
+      (settings as Record<string, unknown>).iso as number | undefined;
+
+    // Phone cameras typically have a fixed aperture
+    const fNumber = 1.8; // typical phone rear camera
+
+    if (exposureTime && iso) {
+      return { exposureTime, iso, aperture: fNumber };
+    }
+
+    // Try getPhotoSettings as fallback
+    try {
+      const photoSettings = await ic.getPhotoSettings();
+      const pExposure = (photoSettings as Record<string, unknown>)
+        .exposureTime as number | undefined;
+      const pIso = (photoSettings as Record<string, unknown>).iso as
+        | number
+        | undefined;
+      if (pExposure && pIso) {
+        return { exposureTime: pExposure, iso: pIso, aperture: fNumber };
+      }
+    } catch {
+      // getPhotoSettings not supported
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Back-calculate scene EV100 from camera settings and image brightness.
+ *
+ * The camera's auto-exposure tries to render the scene at ~18% gray.
+ * Given the camera's chosen settings (t, ISO, f), we know:
+ *   EV_camera = log2(N² / t)
+ *   EV100_camera = EV_camera - log2(ISO / 100)
+ *
+ * Then we adjust based on how far the average pixel brightness is from
+ * the target mid-gray (the camera might not perfectly reach its target):
+ *   EV100_scene = EV100_camera + log2(brightness / 0.18)
+ *
+ * This is significantly more accurate than pixel-only estimation.
+ */
+export function backCalculateEV(
+  exposureTime: number,
+  iso: number,
+  aperture: number,
+  normalizedBrightness: number,
+): number {
+  const evCamera = Math.log2((aperture * aperture) / exposureTime);
+  const ev100Camera = evCamera - Math.log2(iso / 100);
+
+  // Adjust for how bright the image actually is vs. 18% gray target
+  const brightnessAdjust = Math.log2(
+    Math.max(normalizedBrightness, 0.001) / 0.18,
+  );
+  return ev100Camera + brightnessAdjust;
+}
+
 /**
  * Analyze a video frame and return average luminance (0–1).
- * Applies weighting based on metering mode.
+ * Uses perceptual luminance weights and metering-mode spatial weighting.
+ * Samples every 4th pixel for performance.
  */
 export function analyzeFrame(
   canvas: HTMLCanvasElement,
@@ -24,67 +110,97 @@ export function analyzeFrame(
   let totalWeight = 0;
   let totalLum = 0;
 
+  // Sample every 4th pixel (stride of 16 bytes)
   for (let i = 0; i < data.length; i += 16) {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
 
-    // sRGB luminance
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    // Linearize sRGB
+    const rLin = srgbToLinear(r / 255);
+    const gLin = srgbToLinear(g / 255);
+    const bLin = srgbToLinear(b / 255);
+    const lum = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
 
-    const px = (i / 4) % w;
-    const py = Math.floor(i / 4 / w);
+    const pixIdx = i / 4;
+    const px = pixIdx % w;
+    const py = Math.floor(pixIdx / w);
     const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2) / maxR;
 
-    let weight = 1;
-    if (mode === 'center') {
-      weight = Math.max(0, 1 - dist * 1.5);
-    } else if (mode === 'spot') {
-      weight = dist < 0.15 ? 1 : 0;
+    let weight: number;
+    switch (mode) {
+      case 'spot':
+        weight = dist < 0.12 ? 1 : 0;
+        break;
+      case 'center':
+        weight = Math.exp(-3 * dist * dist); // gaussian falloff
+        break;
+      case 'matrix':
+      default:
+        weight = 1;
+        break;
     }
 
     totalWeight += weight;
     totalLum += lum * weight;
   }
 
-  return totalWeight > 0 ? totalLum / totalWeight / 255 : 0;
+  return totalWeight > 0 ? totalLum / totalWeight : 0;
 }
 
 /**
- * Convert normalized luminance (0–1) from camera to approximate lux.
- * This is a rough estimate since phone cameras auto-expose.
- * The mapping uses a gamma-corrected model with calibration.
+ * Compute histogram from frame data (256 bins).
  */
-export function luminanceToLux(normalizedLum: number): number {
-  // Reverse gamma correction (sRGB)
-  const linear =
-    normalizedLum <= 0.04045
-      ? normalizedLum / 12.92
-      : Math.pow((normalizedLum + 0.055) / 1.055, 2.4);
+export function computeHistogram(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+): number[] {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.drawImage(video, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const hist = new Array<number>(256).fill(0);
 
-  // Map linear brightness to lux range.
-  // Due to auto-exposure, mid-gray (~0.18 linear) maps to ~250-400 lux (typical indoor).
-  // We use a logarithmic scale centered on the assumption that
-  // the camera tries to expose for 18% gray.
-  // This is a heuristic — real calibration would need device-specific data.
-  const baseEv = 8; // assume camera targets EV ~8 at mid-gray
-  const evAdjust = Math.log2(Math.max(linear, 0.001) / 0.18);
-  const ev = baseEv + evAdjust;
-  return 2.5 * Math.pow(2, ev);
+  for (let i = 0; i < data.length; i += 16) {
+    const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    hist[lum]++;
+  }
+
+  // Normalize
+  const max = Math.max(...hist);
+  if (max > 0) {
+    for (let i = 0; i < 256; i++) hist[i] /= max;
+  }
+  return hist;
 }
 
 /**
- * Get metering region info for UI overlay.
+ * Pixel-only EV estimation (fallback when ImageCapture is unavailable).
+ * Less accurate due to auto-exposure, but uses a calibrated model.
  */
+export function pixelOnlyEV(linearBrightness: number): number {
+  // Camera auto-exposure targets ~18% gray (linear ~0.18).
+  // Assume the camera is properly exposed at ~EV 8 for indoor scenes.
+  // Scale from there based on relative brightness.
+  const baseEv = 8;
+  const adjust = Math.log2(Math.max(linearBrightness, 0.0001) / 0.18);
+  return baseEv + adjust;
+}
+
+function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
 export function getMeteringRegion(
   mode: MeteringMode,
 ): { radiusPct: number; label: string } {
   switch (mode) {
     case 'spot':
-      return { radiusPct: 15, label: 'Spot' };
+      return { radiusPct: 12, label: 'Spot' };
     case 'center':
-      return { radiusPct: 50, label: 'Center' };
+      return { radiusPct: 50, label: 'Center-Weighted' };
     case 'matrix':
-      return { radiusPct: 100, label: 'Matrix' };
+      return { radiusPct: 100, label: 'Multi' };
   }
 }

@@ -19,7 +19,6 @@ function App() {
     setIsManualEv(false);
   }, [camera]);
 
-  // Start metering when camera becomes active
   useEffect(() => {
     if (
       camera.isActive &&
@@ -33,39 +32,40 @@ function App() {
         camera.canvasRef.current,
         camera.ctxRef.current,
         camera.videoRef.current,
+        camera.streamRef.current,
       );
     }
     if (!camera.isActive && meteringRef.current) {
       meteringRef.current = false;
       meter.stopMetering();
     }
-  }, [camera.isActive, camera.canvasRef, camera.ctxRef, camera.videoRef, meter]);
+  }, [camera.isActive, camera.canvasRef, camera.ctxRef, camera.videoRef, camera.streamRef, meter]);
 
   const displayEv = isManualEv ? manualEv : meter.ev;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col max-w-lg mx-auto">
+    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white flex flex-col max-w-lg mx-auto">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-400" />
-          <h1 className="text-sm font-semibold tracking-wide">
-            X100V LIGHT METER
+      <header className="flex items-center justify-between px-4 py-3 border-b border-white/[0.04]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+          <h1 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/80">
+            X100V Light Meter
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {camera.isActive && (
             <button
               onClick={camera.toggleCamera}
-              className="text-white/40 hover:text-white/70 transition-colors p-1"
+              className="text-white/30 hover:text-white/60 transition-colors p-1.5 rounded-lg hover:bg-white/5"
               title="Switch camera"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth={1.5}
+                strokeWidth={2}
               >
                 <path
                   strokeLinecap="round"
@@ -77,19 +77,19 @@ function App() {
           )}
           <button
             onClick={() => setIsManualEv(!isManualEv)}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
+            className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold tracking-wider transition-all ${
               isManualEv
-                ? 'bg-amber-400 text-black font-semibold'
-                : 'bg-white/5 text-white/40 hover:bg-white/10'
+                ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
+                : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/50'
             }`}
           >
-            {isManualEv ? 'MANUAL' : 'AUTO'}
+            {isManualEv ? 'MANUAL EV' : 'AUTO'}
           </button>
         </div>
       </header>
 
       {/* Viewfinder */}
-      <div className="px-4 pt-3">
+      <div className="px-3 pt-3">
         <div
           onClick={!camera.isActive ? handleStart : undefined}
           className={!camera.isActive ? 'cursor-pointer' : ''}
@@ -98,10 +98,13 @@ function App() {
             videoRef={camera.videoRef}
             meteringMode={meter.meteringMode}
             isActive={camera.isActive}
+            isLocked={meter.isLocked}
+            histogram={meter.histogram}
+            source={meter.source}
           />
         </div>
         {camera.error && (
-          <div className="text-red-400 text-xs text-center mt-2">
+          <div className="text-red-400/80 text-xs text-center mt-2 font-medium">
             {camera.error}
           </div>
         )}
@@ -119,10 +122,13 @@ function App() {
         isManual={isManualEv}
         manualEv={manualEv}
         onManualEvChange={setManualEv}
+        isLocked={meter.isLocked}
+        onToggleLock={meter.toggleLock}
+        onSaveReading={meter.saveReading}
       />
 
       {/* Mode selectors */}
-      <div className="px-4 pb-3">
+      <div className="px-4 pb-4">
         <ModeSelector
           exposureMode={exposureMode}
           onExposureModeChange={setExposureMode}
@@ -132,16 +138,21 @@ function App() {
       </div>
 
       {/* Divider */}
-      <div className="h-px bg-white/5 mx-4" />
+      <div className="h-px bg-white/[0.04] mx-4" />
 
       {/* Settings */}
       <div className="flex-1 overflow-y-auto pt-3">
-        <SettingsPanel ev={displayEv} exposureMode={exposureMode} />
+        <SettingsPanel
+          ev={displayEv}
+          exposureMode={exposureMode}
+          readings={meter.readings}
+          onClearReadings={meter.clearReadings}
+        />
       </div>
 
       {/* Footer */}
-      <footer className="text-center py-3 text-[10px] text-white/20 border-t border-white/5">
-        Fujifilm X100V · 23mm f/2 R WR · APS-C
+      <footer className="text-center py-2.5 text-[9px] text-white/15 border-t border-white/[0.04] tracking-wider">
+        Fujinon 23mm f/2 R WR · X-Trans CMOS 4 · APS-C
       </footer>
     </div>
   );
