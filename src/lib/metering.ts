@@ -169,16 +169,16 @@ export function computeHistogram(
  * Pixel-only EV estimation (fallback when ImageCapture is unavailable).
  *
  * Phone cameras auto-expose to keep frames near mid-gray (~0.18 linear),
- * so pixel brightness is a compressed proxy for scene EV. This is inherently
- * approximate — use the EV compensation slider to calibrate against a known
- * reference (e.g. Sunny 16 chart).
+ * so pixel brightness is heavily compressed. Indoor scenes that are really
+ * EV 5–6 often appear as bright as outdoor scenes in the video feed.
  *
- * Base EV 7 sits between typical indoor (5–8) and outdoor (10–15).
- * Gain of 2.5 expands the compressed range to roughly EV 3–12.
+ * This calibration is biased toward indoor (base EV 4) since that's the
+ * most common use case where a light meter is needed. For outdoor scenes,
+ * use the scene-type preset buttons or the EV comp slider to shift up.
  */
 export function pixelOnlyEV(linearBrightness: number): number {
-  const baseEv = 7;
-  const gain = 2.5;
+  const baseEv = 4;
+  const gain = 1.5;
   const adjust = Math.log2(Math.max(linearBrightness, 0.0001) / 0.18);
   return baseEv + gain * adjust;
 }

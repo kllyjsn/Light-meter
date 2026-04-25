@@ -182,43 +182,72 @@ export function checkExposure(
 /** Generate multiple exposure combos for a given EV, sorted by quality. */
 export function generateCombinations(
   ev100: number,
-  count = 12,
+  count = 8,
 ): ExposureTriangle[] {
-  const results: ExposureTriangle[] = [];
+  const combos: ExposureTriangle[] = [];
 
   for (const useND of [false, true]) {
     const effectiveEv = useND ? ev100 - ND_FILTER_STOPS : ev100;
 
     for (const aperture of APERTURES) {
+      const av = 2 * Math.log2(aperture);
       for (const iso of ISO_VALUES) {
-        const av = 2 * Math.log2(aperture);
         const sv = Math.log2(iso / 100);
         const tv = effectiveEv + sv - av;
         const t = Math.pow(2, -tv);
         const closest = findClosestShutter(t);
         if (closest === null) continue;
 
-        results.push({
+        combos.push({
           aperture,
           shutterSpeed: closest,
           iso,
           needsND: useND,
           needsElectronicShutter: closest < 1 / 4000,
+          slowShutter: closest > HANDHELD_MIN_SHUTTER,
         });
       }
     }
   }
 
-  // Sort: prefer no-ND, low ISO, then sharp apertures
-  results.sort((a, b) => {
-    if (a.needsND !== b.needsND) return a.needsND ? 1 : -1;
-    if (a.iso !== b.iso) return a.iso - b.iso;
-    const aSharp = Math.abs(Math.log2(a.aperture / 5.6));
-    const bSharp = Math.abs(Math.log2(b.aperture / 5.6));
-    return aSharp - bSharp;
-  });
+  // Deduplicate: one entry per (aperture, shutter, ND) — keep lowest ISO
+  const unique = new Map<string, ExposureTriangle>();
+  for (const c of combos) {
+    const key = `${c.aperture}|${c.shutterSpeed}|${!!c.needsND}`;
+    const prev = unique.get(key);
+    if (!prev || c.iso < prev.iso) {
+      unique.set(key, c);
+    }
+  }
 
-  return results.slice(0, count);
+  // Score: prefer handheld-safe, no-ND, low ISO, sharp apertures
+  const scored = [...unique.values()].map((r) => {
+    const slow = r.shutterSpeed > HANDHELD_MIN_SHUTTER ? 8 : 0;
+    const nd = r.needsND ? 4 : 0;
+    const iso = Math.log2(r.iso / 100);
+    const sharp = Math.abs(Math.log2(r.aperture / 5.6));
+    return { ...r, _score: slow + nd + iso + sharp };
+  });
+  scored.sort((a, b) => a._score - b._score);
+
+  // One entry per aperture for clean display
+  const usedApertures = new Set<number>();
+  const result: ExposureTriangle[] = [];
+  for (const r of scored) {
+    if (usedApertures.has(r.aperture)) continue;
+    usedApertures.add(r.aperture);
+    result.push({
+      aperture: r.aperture,
+      shutterSpeed: r.shutterSpeed,
+      iso: r.iso,
+      needsND: r.needsND,
+      needsElectronicShutter: r.needsElectronicShutter,
+      slowShutter: r.slowShutter,
+    });
+    if (result.length >= count) break;
+  }
+
+  return result;
 }
 
 function findClosestShutter(target: number): number | null {
