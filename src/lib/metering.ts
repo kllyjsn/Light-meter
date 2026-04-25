@@ -177,15 +177,19 @@ export function computeHistogram(
 
 /**
  * Pixel-only EV estimation (fallback when ImageCapture is unavailable).
- * Less accurate due to auto-exposure, but uses a calibrated model.
+ *
+ * Phone cameras auto-expose to keep frames near mid-gray (~0.18 linear),
+ * compressing the visible brightness range. A gain factor expands this
+ * compressed signal back into a usable EV span (~0 to ~14).
+ *
+ * Calibrated so that a typical auto-exposed indoor frame (brightness ≈ 0.18)
+ * maps to EV 5, matching real-world indoor illuminance (~160 lux).
  */
 export function pixelOnlyEV(linearBrightness: number): number {
-  // Camera auto-exposure targets ~18% gray (linear ~0.18).
-  // Assume the camera is properly exposed at ~EV 8 for indoor scenes.
-  // Scale from there based on relative brightness.
-  const baseEv = 8;
+  const baseEv = 5;
+  const gain = 3.5;
   const adjust = Math.log2(Math.max(linearBrightness, 0.0001) / 0.18);
-  return baseEv + adjust;
+  return baseEv + gain * adjust;
 }
 
 function srgbToLinear(c: number): number {
