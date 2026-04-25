@@ -40,7 +40,7 @@ const MAX_READINGS = 50;
 
 export function useMeter(): UseMeterReturn {
   const [ev, setEv] = useState(10);
-  const [lux, setLux] = useState(0);
+  // lux is derived from adjustedEv via evToLux() in the return
   const [luminance, setLuminance] = useState(0);
   const [histogram, setHistogram] = useState<number[]>([]);
   const [meteringMode, setMeteringMode] = useState<MeteringMode>('center');
@@ -69,16 +69,17 @@ export function useMeter(): UseMeterReturn {
   }, []);
 
   const saveReading = useCallback(() => {
+    const adjustedEvValue = ev + evOffset;
     const reading: MeterReading = {
-      ev100: ev,
-      lux,
+      ev100: adjustedEvValue,
+      lux: evToLux(adjustedEvValue),
       rawLuminance: luminance,
       timestamp: Date.now(),
       meteringMode,
       source,
     };
     setReadings((prev) => [reading, ...prev].slice(0, MAX_READINGS));
-  }, [ev, lux, luminance, meteringMode, source]);
+  }, [ev, evOffset, luminance, meteringMode, source]);
 
   const clearReadings = useCallback(() => {
     setReadings([]);
@@ -138,7 +139,6 @@ export function useMeter(): UseMeterReturn {
         smoothEv.current += (rawEv - smoothEv.current) * SMOOTHING_FACTOR;
 
         setLuminance(rawLum);
-        setLux(evToLux(smoothEv.current));
         setEv(smoothEv.current);
 
         // Update histogram every 10 frames
@@ -168,7 +168,7 @@ export function useMeter(): UseMeterReturn {
 
   return {
     ev: adjustedEv,
-    lux,
+    lux: evToLux(adjustedEv),
     luminance,
     histogram,
     meteringMode,
